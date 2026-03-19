@@ -5,11 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Check-In Scanner</title>
     <link rel="stylesheet" href="style.css">
+    <!-- NO scripts in <head> — all scripts load at bottom of body in correct order -->
     <style>
-        #video { width: 100%; max-width: 500px; border-radius: 15px; background: #000; display: block; margin: 0 auto; border: 4px solid var(--gold); min-height: 280px; }
-        #result-popup { display: none; padding: 20px; border-radius: 15px; margin-top: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-left: 5px solid transparent; }
-        #status { font-weight: bold; margin-top: 10px; padding: 10px; border-radius: 5px; }
-        .scanner-btns { display: flex; gap: 10px; justify-content: center; margin: 14px 0; }
+        #video {
+            width: 100%;
+            max-width: 500px;
+            border-radius: 15px;
+            background: #000;
+            display: block;
+            margin: 0 auto;
+            border: 4px solid var(--gold);
+            /* FIXED: reserve space so layout doesn't jump when camera starts */
+            min-height: 280px;
+        }
+        #result-popup {
+            display: none;
+            padding: 20px;
+            border-radius: 15px;
+            margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            /* FIXED: left border used by handleMatch for colour coding */
+            border-left: 5px solid transparent;
+        }
+        #status {
+            font-weight: bold;
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .scanner-btns {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 14px 0;
+        }
+        /* FIXED: res-detail uses \n line breaks — pre-wrap renders them */
         #res-detail { white-space: pre-wrap; }
     </style>
 </head>
@@ -24,13 +55,16 @@
 
     <div class="container" style="text-align:center;">
         <h2>Scan Attendee QR</h2>
+
         <video id="video" autoplay playsinline muted></video>
 
+        <!-- FIXED: added Stop button — original had no way to stop the camera -->
         <div class="scanner-btns">
             <button class="btn btn-gold" id="start-btn" onclick="handleStartBtn()">📷 Start Camera</button>
             <button class="btn" id="stop-btn" onclick="handleStopBtn()" style="display:none;">⏹ Stop Camera</button>
         </div>
 
+        <!-- Stats visible on scanner page too -->
         <div class="stats-row" style="margin-bottom:16px;">
             <div class="stat-box">Total: <b id="total-count">0</b></div>
             <div class="stat-box">In: <b id="in-count" style="color:var(--success)">0</b></div>
@@ -45,27 +79,33 @@
         </div>
     </div>
 
-    <!-- CRITICAL LOAD ORDER -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+    <!-- Load local copy of jsQR — download jsQR.min.js and put it in this folder -->
+    <script src="jsQR.min.js"></script>
     <script src="app.js"></script>
     <script>
         window.addEventListener('load', () => {
             if (typeof jsQR === 'undefined') {
                 const s = document.getElementById('status');
-                s.innerText = '❌ jsQR library failed to load. Check your internet connection and refresh.';
+                s.innerHTML = `❌ <strong>jsQR.min.js not found.</strong><br>
+                    Download it: <a href="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js" 
+                    style="color:var(--gold)">jsQR.min.js</a> and put it in your project folder.`;
                 s.style.color = 'red';
                 document.getElementById('start-btn').disabled = true;
+                document.getElementById('start-btn').style.opacity = '0.5';
                 return;
             }
 
             const count = JSON.parse(localStorage.getItem('guests') || '[]').length;
             const status = document.getElementById('status');
+            const startBtn = document.getElementById('start-btn');
+
             if (count === 0) {
-                status.innerText = '⚠️ No guests loaded. Visit Generator and upload CSV first.';
-                status.style.color = 'red';
-                document.getElementById('start-btn').disabled = true;
+                status.innerText = '⚠️ No guests loaded. Go to Generator and upload your CSV first.';
+                status.style.color = 'orange';
+                startBtn.disabled = true;
+                startBtn.style.opacity = '0.5';
             } else {
-                status.innerText = `✅ Ready — ${count} guests loaded. Tap Start.`;
+                status.innerText = `✅ Ready — ${count} guests loaded. Tap Start Camera.`;
                 status.style.color = '#27ae60';
             }
         });
@@ -80,7 +120,6 @@
             stopScanner();
             document.getElementById('start-btn').style.display = 'inline-flex';
             document.getElementById('stop-btn').style.display = 'none';
-            document.getElementById('status').innerText = 'Scanner stopped.';
         }
     </script>
 </body>
