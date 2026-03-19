@@ -5,7 +5,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Check-In Scanner</title>
     <link rel="stylesheet" href="style.css">
+    <!-- jsQR must load BEFORE app.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+    <style>
+        #video {
+            width: 100%;
+            max-width: 500px;
+            border-radius: 15px;
+            background: #000;
+            display: block;
+            margin: 0 auto;
+            border: 4px solid var(--gold);
+            /* FIXED: reserve space so layout doesn't jump when camera starts */
+            min-height: 280px;
+        }
+        #result-popup {
+            display: none;
+            padding: 20px;
+            border-radius: 15px;
+            margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            /* FIXED: left border used by handleMatch for colour coding */
+            border-left: 5px solid transparent;
+        }
+        #status {
+            font-weight: bold;
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .scanner-btns {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 14px 0;
+        }
+        /* FIXED: res-detail uses \n line breaks — pre-wrap renders them */
+        #res-detail { white-space: pre-wrap; }
+    </style>
 </head>
 <body>
     <nav>
@@ -17,19 +55,68 @@
     </nav>
 
     <div class="container" style="text-align:center;">
-        <h2>Point Camera at QR</h2>
+        <h2>Scan Attendee QR</h2>
+
         <video id="video" autoplay playsinline muted></video>
-        <p id="status">Ready to scan...</p>
-        
-        <div id="result-popup" style="display:none; padding:20px; border-radius:15px; margin-top:20px; animation: slideUp 0.3s ease;">
+
+        <!-- FIXED: added Stop button — original had no way to stop the camera -->
+        <div class="scanner-btns">
+            <button class="btn btn-gold" id="start-btn" onclick="startScanner()">📷 Start Camera</button>
+            <button class="btn" id="stop-btn" onclick="stopScanner()" style="display:none;">⏹ Stop Camera</button>
+        </div>
+
+        <!-- Stats visible on scanner page too -->
+        <div class="stats-row" style="margin-bottom:16px;">
+            <div class="stat-box">Total: <b id="total-count">0</b></div>
+            <div class="stat-box">In: <b id="in-count" style="color:var(--success)">0</b></div>
+            <div class="stat-box">Pending: <b id="pending-count">0</b></div>
+        </div>
+
+        <p id="status">Checking guest list...</p>
+
+        <div id="result-popup">
             <h2 id="res-name"></h2>
             <p id="res-detail"></p>
         </div>
     </div>
 
+    <!-- FIXED: app.js loads AFTER DOM elements exist -->
     <script src="app.js"></script>
     <script>
-        window.onload = () => { if(typeof startScanner === "function") startScanner(); };
+        window.onload = () => {
+            // Re-read from localStorage fresh (app.js already does this on load,
+            // but we re-check here to drive the UI message)
+            const count = JSON.parse(localStorage.getItem('guests') || '[]').length;
+            const status = document.getElementById('status');
+            const startBtn = document.getElementById('start-btn');
+
+            if (count === 0) {
+                status.innerText = '⚠️ NO GUESTS LOADED! Go to Generator and upload CSV first.';
+                status.style.color = 'red';
+                // FIXED: disable start button so user can't scan against an empty list
+                startBtn.disabled = true;
+                startBtn.style.opacity = '0.5';
+            } else {
+                status.innerText = `✅ Ready — ${count} guests loaded. Tap Start Camera.`;
+                status.style.color = '#27ae60';
+            }
+        };
+
+        // FIXED: override stopScanner to also toggle button visibility
+        const _origStop = stopScanner;
+        stopScanner = function() {
+            _origStop();
+            document.getElementById('start-btn').style.display = 'inline-flex';
+            document.getElementById('stop-btn').style.display = 'none';
+        };
+
+        // FIXED: override startScanner to toggle button visibility
+        const _origStart = startScanner;
+        startScanner = function() {
+            _origStart();
+            document.getElementById('start-btn').style.display = 'none';
+            document.getElementById('stop-btn').style.display = 'inline-flex';
+        };
     </script>
 </body>
 </html>
