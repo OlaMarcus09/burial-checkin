@@ -1,29 +1,30 @@
-// Load data from LocalStorage
 let guests = JSON.parse(localStorage.getItem('guests') || '[]');
 let checkins = JSON.parse(localStorage.getItem('checkins') || '[]');
 
-// --- DATA PERSISTENCE ---
-function saveCheckins() {
+// --- DATA HANDLING ---
+function saveAll() {
+    localStorage.setItem('guests', JSON.stringify(guests));
     localStorage.setItem('checkins', JSON.stringify(checkins));
+    updateDashboard();
 }
 
-// --- GENERATOR PAGE LOGIC ---
+// --- CSV PARSING ---
 const csvInput = document.getElementById('csv-input');
 if (csvInput) {
     csvInput.onchange = (e) => {
         const reader = new FileReader();
         reader.onload = (event) => {
             const lines = event.target.result.split('\n');
-            // Improved CSV parsing for your specific files
-            guests = lines.slice(1).filter(l => l.trim()).map((line, i) => {
+            guests = lines.slice(1).filter(l => l.trim().length > 5).map((line, i) => {
                 const col = line.split(',');
+                // Matches the "Master" file columns: ID, Name, Email, Phone, InvitedBy
                 return { 
-                    id: `ID-${i}`, 
-                    name: col[6] || col[1] || 'Unknown Guest', 
-                    info: col[3] || '' 
+                    id: col[0] || `ID-${i}`, 
+                    name: (col[1] || "Guest").replace(/"/g, ""), 
+                    info: col[4] || "General" 
                 };
             });
-            localStorage.setItem('guests', JSON.stringify(guests));
+            saveAll();
             renderGuests();
         };
         reader.readAsText(e.target.files[0]);
@@ -40,7 +41,7 @@ function renderGuests() {
         card.className = `card ${isChecked ? 'checked-in' : ''}`;
         card.innerHTML = `
             <h3>${g.name}</h3>
-            <p><small>${g.info}</small></p>
+            <p><small>Invited by: ${g.info}</small></p>
             <div class="qr-space" id="qr-${g.id}"></div>
             <button class="btn btn-wa" onclick="shareToWhatsApp('${g.id}', '${g.name}')">WhatsApp Invite</button>
         `;
@@ -49,10 +50,31 @@ function renderGuests() {
     });
 }
 
-// --- SCANNER PAGE LOGIC ---
+// --- WHATSAPP SHARE ---
+async function shareToWhatsApp(id, name) {
+    const canvas = document.querySelector(`#qr-${id} canvas`);
+    if(!canvas) return alert("Generate QRs first!");
+    
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const file = new File([blob], `Pass_${name}.png`, { type: 'image/png' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+                files: [file],
+                title: 'Burial Entry Pass',
+                text: `Hello ${name}, here is your entry QR code for the service.`
+            });
+        } catch (err) { console.log("Share cancelled"); }
+    } else {
+        alert("Sharing not supported on this browser. Use Safari or Chrome mobile.");
+    }
+}
+
+// --- SCANNER ---
 async function startScanner() {
     const video = document.getElementById('video');
-    if (!video) return; // Exit if not on scanner page
+    if (!video) return;
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
@@ -61,54 +83,70 @@ async function startScanner() {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
-        const loop = () => {
+        const scanLoop = () => {
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, canvas.width, canvas.height);
-                
-                if (code) {
-                    handleMatch(code.data);
-                }
+                const code = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
+                if (code) handleMatch(code.data);
             }
-            requestAnimationFrame(loop);
+            requestAnimationFrame(scanLoop);
         };
-        loop();
+        scanLoop();
     } catch (err) {
-        document.getElementById('status').innerText = "Error: Camera access denied.";
-        console.error(err);
+        document.getElementById('status').innerText = "Camera Error. Check Permissions.";
     }
 }
 
 function handleMatch(scannedId) {
     const guest = guests.find(g => g.id === scannedId);
     const popup = document.getElementById('result-popup');
-    const nameEl = document.getElementById('res-name');
-    
-    if (!guest) {
-        popup.style.display = "block";
-        popup.style.background = "#fee";
-        nameEl.innerText = "Unknown Code";
-        return;
-    }
+    if (!guest) return;
 
+    popup.style.display = "block";
     if (checkins.includes(scannedId)) {
-        popup.style.display = "block";
         popup.style.background = "#fff3cd";
-        nameEl.innerText = guest.name + " (Already In)";
+        document.getElementById('res-name').innerText = "Already Checked In";
+        document.getElementById('res-detail').innerText = guest.name;
     } else {
         checkins.push(scannedId);
-        saveCheckins();
-        popup.style.display = "block";
+        saveAll();
         popup.style.background = "#d4edda";
-        nameEl.innerText = "✓ Welcome, " + guest.name;
-        
-        // Vibrate phone on success
+        document.getElementById('res-name').innerText = "✓ Welcome";
+        document.getElementById('res-detail').innerText = guest.name;
         if (navigator.vibrate) navigator.vibrate(200);
     }
 }
 
-// Run render if on Generator page
+// --- UTILS ---
+function updateDashboard() {
+    if(document.getElementById('total-count')) {
+        document.getElementById('total-count').innerText = guests.length;
+        document.getElementById('in-count').innerText = checkins.length;
+    }
+}
+
+function downloadReport() {
+    let csv = "ID,Name,Status\n";
+    guests.forEach(g => {
+        csv += `${g.id},${g.name},${checkins.includes(g.id) ? 'Present' : 'Absent'}\n`;
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Attendance_Report.csv';
+    a.click();
+}
+
+function resetSystem() {
+    if(confirm("This will delete all guests and check-ins. Continue?")) {
+        localStorage.clear();
+        location.reload();
+    }
+}
+
+// Init
+updateDashboard();
 if (document.getElementById('guest-grid')) renderGuests();
