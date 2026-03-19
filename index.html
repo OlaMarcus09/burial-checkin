@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Guest List & QR Generator</title>
     <link rel="stylesheet" href="style.css">
+    <!-- QRCode lib must load BEFORE app.js so QRCode is defined when renderGuests() runs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
@@ -18,22 +19,32 @@
 
     <div class="container">
         <h1>Guest Management</h1>
+
+        <!-- Upload card -->
         <div class="card" style="margin-bottom: 20px;">
-            <p>Upload the <b>Master Guest List CSV</b> to generate codes.</p>
-            <input type="file" id="csv-input" accept=".csv">
+            <p>Upload the <b>Master Guest List CSV</b> to generate QR codes.</p>
+            <input type="file" id="csv-input" accept=".csv" style="margin-top:10px;">
         </div>
 
+        <!-- Stats -->
         <div class="stats-row">
             <div class="stat-box">Total Guests: <b id="total-count">0</b></div>
             <div class="stat-box">Checked In: <b id="in-count" style="color:var(--success)">0</b></div>
+            <!-- FIXED: added pending-count element that app.js references but was missing -->
+            <div class="stat-box">Pending: <b id="pending-count">0</b></div>
         </div>
 
-        <button class="btn btn-gold" onclick="downloadReport()">📥 Download Attendance Report</button>
-        <button class="btn" style="background:#8b2020; color:white;" onclick="resetSystem()">⚠️ Reset All Data</button>
+        <!-- Action buttons -->
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
+            <button class="btn btn-gold" onclick="downloadReport()">📥 Download Attendance Report</button>
+            <button class="btn" style="background:#8b2020; color:white;" onclick="resetSystem()">⚠️ Reset All Data</button>
+        </div>
 
+        <!-- Guest grid — app.js renders cards here -->
         <div class="guest-grid" id="guest-grid"></div>
     </div>
 
+    <!-- FIXED: app.js loads AFTER the DOM so getElementById calls don't return null -->
     <script src="app.js"></script>
 </body>
 </html>
