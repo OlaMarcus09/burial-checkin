@@ -17,11 +17,11 @@
     </nav>
 
     <div class="container" style="text-align:center;">
-        <h2>Scan Attendee</h2>
-        <video id="video" autoplay playsinline muted style="width: 100%; border: 2px solid var(--gold);"></video>
-        <p id="status">Point camera at a QR code</p>
+        <h2>Point Camera at QR</h2>
+        <video id="video" autoplay playsinline muted></video>
+        <p id="status">Ready to scan...</p>
         
-        <div id="result-popup" style="display:none; padding:20px; border-radius:15px; margin-top:20px;">
+        <div id="result-popup" style="display:none; padding:20px; border-radius:15px; margin-top:20px; animation: slideUp 0.3s ease;">
             <h2 id="res-name"></h2>
             <p id="res-detail"></p>
         </div>
@@ -29,7 +29,6 @@
 
     <script src="app.js"></script>
     <script>
-        // Start scanner immediately on this page
         window.onload = () => { if(typeof startScanner === "function") startScanner(); };
     </script>
 </body>
