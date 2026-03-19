@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Check-In Scanner</title>
     <link rel="stylesheet" href="style.css">
-    <!-- jsQR must load BEFORE app.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+    <!-- NO scripts in <head> — all scripts load at bottom of body in correct order -->
     <style>
         #video {
             width: 100%;
@@ -61,8 +60,8 @@
 
         <!-- FIXED: added Stop button — original had no way to stop the camera -->
         <div class="scanner-btns">
-            <button class="btn btn-gold" id="start-btn" onclick="startScanner()">📷 Start Camera</button>
-            <button class="btn" id="stop-btn" onclick="stopScanner()" style="display:none;">⏹ Stop Camera</button>
+            <button class="btn btn-gold" id="start-btn" onclick="handleStartBtn()">📷 Start Camera</button>
+            <button class="btn" id="stop-btn" onclick="handleStopBtn()" style="display:none;">⏹ Stop Camera</button>
         </div>
 
         <!-- Stats visible on scanner page too -->
@@ -80,43 +79,55 @@
         </div>
     </div>
 
-    <!-- FIXED: app.js loads AFTER DOM elements exist -->
+    <!--
+        CRITICAL LOAD ORDER — scripts must be in this exact sequence:
+        1. jsQR  → defines window.jsQR
+        2. app.js → uses jsQR inside startScanner()
+        3. inline init script → runs after both are ready
+    -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
     <script src="app.js"></script>
     <script>
-        window.onload = () => {
-            // Re-read from localStorage fresh (app.js already does this on load,
-            // but we re-check here to drive the UI message)
+        window.addEventListener('load', () => {
+
+            // Guard: if jsQR failed to download (no internet, CDN down, etc.)
+            if (typeof jsQR === 'undefined') {
+                const s = document.getElementById('status');
+                s.innerText = '❌ jsQR library failed to load. Check your internet connection and refresh the page.';
+                s.style.color = 'red';
+                document.getElementById('start-btn').disabled = true;
+                document.getElementById('start-btn').style.opacity = '0.5';
+                return;
+            }
+
             const count = JSON.parse(localStorage.getItem('guests') || '[]').length;
             const status = document.getElementById('status');
             const startBtn = document.getElementById('start-btn');
 
             if (count === 0) {
-                status.innerText = '⚠️ NO GUESTS LOADED! Go to Generator and upload CSV first.';
+                status.innerText = '⚠️ No guests loaded. Go to Generator and upload your CSV first.';
                 status.style.color = 'red';
-                // FIXED: disable start button so user can't scan against an empty list
                 startBtn.disabled = true;
                 startBtn.style.opacity = '0.5';
             } else {
                 status.innerText = `✅ Ready — ${count} guests loaded. Tap Start Camera.`;
                 status.style.color = '#27ae60';
             }
-        };
+        });
 
-        // FIXED: override stopScanner to also toggle button visibility
-        const _origStop = stopScanner;
-        stopScanner = function() {
-            _origStop();
-            document.getElementById('start-btn').style.display = 'inline-flex';
-            document.getElementById('stop-btn').style.display = 'none';
-        };
-
-        // FIXED: override startScanner to toggle button visibility
-        const _origStart = startScanner;
-        startScanner = function() {
-            _origStart();
+        // Toggle buttons when starting
+        function handleStartBtn() {
             document.getElementById('start-btn').style.display = 'none';
             document.getElementById('stop-btn').style.display = 'inline-flex';
-        };
+            startScanner();
+        }
+
+        // Toggle buttons when stopping
+        function handleStopBtn() {
+            stopScanner();
+            document.getElementById('start-btn').style.display = 'inline-flex';
+            document.getElementById('stop-btn').style.display = 'none';
+        }
     </script>
 </body>
 </html>
