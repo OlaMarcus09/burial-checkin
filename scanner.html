@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check-In Scanner</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+</head>
+<body>
+    <nav>
+        <span>✦ Burial Check-In</span>
+        <div>
+            <a href="index.html">Generator</a>
+            <a href="scanner.html" class="active">Scanner</a>
+        </div>
+    </nav>
+
+    <div class="container" style="text-align:center;">
+        <h2>Scan Attendee</h2>
+        <video id="video" autoplay playsinline></video>
+        <p id="status">Point camera at a QR code</p>
+        
+        <div id="result-popup" style="display:none; padding:20px; border-radius:15px; margin-top:20px;">
+            <h2 id="res-name"></h2>
+            <p id="res-detail"></p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        // Start scanner immediately on this page
+        window.onload = () => { if(typeof startScanner === "function") startScanner(); };
+    </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guest List & QR Generator</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+    <nav>
+        <span>✦ Burial Check-In</span>
+        <div>
+            <a href="index.html" class="active">Generator</a>
+            <a href="scanner.html">Scanner</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Guest QR Codes</h1>
+        <input type="file" id="csv-input" accept=".csv">
+        <p><small>Upload your guest list CSV to begin.</small></p>
+
+        <div class="guest-grid" id="guest-grid"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

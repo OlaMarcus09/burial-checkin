@@ -1,0 +1,79 @@
+:root {
+  --ink: #1a1410;
+  --gold: #b8973a;
+  --cream: #faf7f2;
+  --white: #ffffff;
+  --success: #2d6a4f;
+  --border: #d4c9b0;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--cream);
+  color: var(--ink);
+  margin: 0;
+  padding-bottom: 50px;
+}
+
+nav {
+  background: var(--ink);
+  color: var(--gold);
+  display: flex;
+  justify-content: space-between;
+  padding: 15px 25px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+nav a {
+  color: #aaa;
+  text-decoration: none;
+  margin-left: 15px;
+  font-weight: bold;
+}
+
+nav a.active { color: var(--gold); }
+
+.container { max-width: 900px; margin: 20px auto; padding: 0 20px; }
+
+.guest-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  transition: transform 0.2s;
+}
+
+.card.checked-in { border-left: 8px solid var(--success); background: #f0faf5; }
+
+.qr-space {
+  width: 150px;
+  height: 150px;
+  margin: 15px auto;
+  background: white;
+}
+
+.btn {
+  padding: 10px 15px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  margin: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-wa { background: #25D366; color: white; } /* WhatsApp Green */
+.btn-gold { background: var(--gold); color: white; }
+
+video { width: 100%; max-width: 500px; border-radius: 15px; background: #000; }
