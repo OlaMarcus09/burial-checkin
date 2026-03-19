@@ -1,47 +1,77 @@
 // ══════════════════════════════════════════════
-//  BURIAL SERVICE CHECK-IN SYSTEM — app.js
+//  BURIAL SERVICE CHECK-IN — app.js
+//
+//  HOW IT WORKS:
+//  Each QR code contains the guest's full details
+//  as a JSON string, e.g:
+//  {"n":"Babatunde Afolabi","i":"Adekunle"}
+//
+//  The scanner reads this JSON directly from the QR.
+//  It does NOT need to look up anything in localStorage.
+//  This means it works perfectly even if the scanner
+//  phone has never had the CSV uploaded to it.
 // ══════════════════════════════════════════════
 
-let guests = JSON.parse(localStorage.getItem('guests') || '[]');
+let guests   = JSON.parse(localStorage.getItem('guests')   || '[]');
 let checkins = JSON.parse(localStorage.getItem('checkins') || '[]');
+// NOTE: checkins stores guest NAMES (not random IDs)
+// so duplicate detection works across devices
 
 // ── SAVE ──────────────────────────────────────
 function saveAll() {
-    localStorage.setItem('guests', JSON.stringify(guests));
+    localStorage.setItem('guests',   JSON.stringify(guests));
     localStorage.setItem('checkins', JSON.stringify(checkins));
     updateDashboard();
 }
 
-// ── CSV PARSING (FIXED: correct column indices) ──
+// ── CSV PARSER — handles quoted commas correctly ──
+function parseCSVLine(line) {
+    const result = [];
+    let current  = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+            inQuotes = !inQuotes;
+        } else if (ch === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+        } else {
+            current += ch;
+        }
+    }
+    result.push(current.trim());
+    return result;
+}
+
+// ── CSV UPLOAD ────────────────────────────────
 const csvInput = document.getElementById('csv-input');
 if (csvInput) {
     csvInput.onchange = (e) => {
         const reader = new FileReader();
         reader.onload = (event) => {
-            const lines = event.target.result.split('\n');
+            const lines   = event.target.result.split('\n');
             const headers = lines[0].toLowerCase();
 
-            // Detect which CSV format was uploaded
-            // Format A (entire family): Timestamp, Can you attend, How many, Invited by, Phone, Email, Name
-            // Format B (form responses): Timestamp, Can you attend, How many, Invited by, Email
+            // Format A (entire family sheet):
+            //   col: 0=Timestamp, 1=Attend, 2=HowMany, 3=InvitedBy, 4=Phone, 5=Email, 6=Name
+            // Format B (form responses sheet):
+            //   col: 0=Timestamp, 1=Attend, 2=HowMany, 3=InvitedBy, 4=Email
             const isFormatA = headers.includes('name');
 
             guests = lines.slice(1)
                 .filter(l => l.trim().length > 5)
                 .map((line, i) => {
                     const col = parseCSVLine(line);
-
                     let name, info, phone, email;
 
                     if (isFormatA) {
-                        // Format A columns: 0=Timestamp, 1=Attend, 2=HowMany, 3=InvitedBy, 4=Phone, 5=Email, 6=Name
-                        name  = (col[6] || col[5] || `Guest ${i + 1}`).replace(/"/g, '').trim();
+                        name  = (col[6] || col[5] || '').replace(/"/g, '').trim();
                         info  = (col[3] || 'General').replace(/"/g, '').trim();
                         phone = (col[4] || '').replace(/"/g, '').trim();
                         email = (col[5] || '').replace(/"/g, '').trim();
                     } else {
-                        // Format B columns: 0=Timestamp, 1=Attend, 2=HowMany, 3=InvitedBy, 4=Email
-                        name  = (col[4] || `Guest ${i + 1}`).replace(/"/g, '').trim();
+                        name  = (col[4] || '').replace(/"/g, '').trim();
                         info  = (col[3] || 'General').replace(/"/g, '').trim();
                         phone = '';
                         email = (col[4] || '').replace(/"/g, '').trim();
@@ -49,42 +79,22 @@ if (csvInput) {
 
                     if (!name || name.length < 2) return null;
 
-                    return {
-                        id: `guest_${i}_${Date.now()}`,  // FIXED: generate clean unique ID
-                        name,
-                        info,
-                        phone,
-                        email
-                    };
+                    // ── KEY CHANGE ──
+                    // The QR code contains this JSON string directly.
+                    // Scanner reads n (name) and i (invitedBy) straight
+                    // from the QR — no localStorage lookup at all.
+                    const qrPayload = JSON.stringify({ n: name, i: info });
+
+                    return { id: qrPayload, name, info, phone, email };
                 })
-                .filter(Boolean); // remove nulls
+                .filter(Boolean);
 
             saveAll();
             renderGuests();
-            alert(`✓ Loaded ${guests.length} guests successfully!`);
+            alert(`✓ ${guests.length} guests loaded! QR codes are generating...`);
         };
         reader.readAsText(e.target.files[0]);
     };
-}
-
-// Proper CSV line parser (handles quoted commas)
-function parseCSVLine(line) {
-    const result = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (ch === '"') {
-            inQuotes = !inQuotes;
-        } else if (ch === ',' && !inQuotes) {
-            result.push(current);
-            current = '';
-        } else {
-            current += ch;
-        }
-    }
-    result.push(current);
-    return result;
 }
 
 // ── RENDER GUEST CARDS ────────────────────────
@@ -99,44 +109,50 @@ function renderGuests() {
     }
 
     guests.forEach((g, idx) => {
-        const isChecked = checkins.includes(g.id);
-        const card = document.createElement('div');
-        card.className = `card ${isChecked ? 'checked-in' : ''}`;
-        card.id = `card-${g.id}`;
+        const isChecked = checkins.includes(g.name);
+        const card      = document.createElement('div');
+        card.className  = `card ${isChecked ? 'checked-in' : ''}`;
+        card.id         = `card-${idx}`;
+
+        const safeName = g.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
         card.innerHTML = `
             <h3>${g.name}</h3>
             <p><small>Invited by: <strong>${g.info}</strong></small></p>
             ${g.phone ? `<p><small>📞 ${g.phone}</small></p>` : ''}
             ${g.email ? `<p><small>✉️ ${g.email}</small></p>` : ''}
-            <div class="qr-space" id="qr-${g.id}"></div>
+            <div class="qr-space" id="qr-${idx}"></div>
             <div style="display:flex;gap:8px;margin-top:10px;">
-                <button class="btn btn-wa" onclick="shareToWhatsApp('${g.id}', '${g.name.replace(/'/g, "\\'")}')">WhatsApp</button>
-                <button class="btn" onclick="downloadQR('${g.id}', '${g.name.replace(/'/g, "\\'")}')">Save QR</button>
+                <button class="btn btn-wa" onclick="shareToWhatsApp(${idx},'${safeName}')">WhatsApp</button>
+                <button class="btn"        onclick="downloadQR(${idx},'${safeName}')">Save QR</button>
             </div>
         `;
         grid.appendChild(card);
 
-        // Stagger QR generation so page doesn't freeze
+        // Stagger QR generation so page doesn't freeze on large lists
         setTimeout(() => {
-            const el = document.getElementById(`qr-${g.id}`);
-            if (el && typeof QRCode !== 'undefined') {
-                new QRCode(el, {
-                    text: g.id,           // QR encodes the guest ID
-                    width: 150,
-                    height: 150,
-                    colorDark: '#1a1410',
-                    colorLight: '#ffffff',
-                    correctLevel: QRCode.CorrectLevel.M
-                });
+            const el = document.getElementById(`qr-${idx}`);
+            if (!el) return;
+            if (typeof QRCode === 'undefined') {
+                el.innerHTML = '<p style="color:red;font-size:0.75rem;">qrcode.min.js not loaded</p>';
+                return;
             }
+            new QRCode(el, {
+                text: g.id,   // JSON: {"n":"Guest Name","i":"InvitedBy"}
+                width: 150,
+                height: 150,
+                colorDark:    '#1a1410',
+                colorLight:   '#ffffff',
+                correctLevel: QRCode.CorrectLevel.M
+            });
         }, idx * 40);
     });
 }
 
 // ── WHATSAPP SHARE ────────────────────────────
-async function shareToWhatsApp(id, name) {
-    const el = document.getElementById(`qr-${id}`);
-    if (!el) return alert('QR not found. Wait for QRs to finish generating.');
+async function shareToWhatsApp(idx, name) {
+    const el = document.getElementById(`qr-${idx}`);
+    if (!el) return alert('QR not found.');
     const canvas = el.querySelector('canvas');
     if (!canvas) return alert('QR not ready yet. Wait a moment and try again.');
 
@@ -148,47 +164,41 @@ async function shareToWhatsApp(id, name) {
             await navigator.share({
                 files: [file],
                 title: 'Burial Service Entry Pass',
-                text: `Hello ${name}, please find your entry QR code for the burial service attached.`
+                text: `Hello ${name}, here is your QR code entry pass for the burial service.`
             });
         } catch (err) {
             if (err.name !== 'AbortError') console.error('Share error:', err);
         }
     } else {
-        alert('Sharing not supported on this browser. Use Chrome or Safari on mobile, or use the Save QR button instead.');
+        alert('Sharing not supported on this browser. Use the Save QR button instead.');
     }
 }
 
 // ── DOWNLOAD QR ───────────────────────────────
-function downloadQR(id, name) {
-    const el = document.getElementById(`qr-${id}`);
+function downloadQR(idx, name) {
+    const el = document.getElementById(`qr-${idx}`);
     if (!el) return;
     const canvas = el.querySelector('canvas');
-    if (!canvas) return alert('QR not ready yet.');
-    const link = document.createElement('a');
+    if (!canvas) return alert('QR not ready yet. Wait a moment.');
+    const link    = document.createElement('a');
     link.download = `${name.replace(/[^a-z0-9]/gi, '_')}_QR.png`;
-    link.href = canvas.toDataURL();
+    link.href     = canvas.toDataURL();
     link.click();
 }
 
 // ══════════════════════════════════════════════
-//  SCANNER  (FIXED: cooldown + empty data warn)
+//  SCANNER
 // ══════════════════════════════════════════════
-let isProcessing = false;  // FIXED: prevents flood of repeated scans
+let isProcessing  = false;
 let scannerStream = null;
 
 async function startScanner() {
-    const video = document.getElementById('video');
+    const video  = document.getElementById('video');
     const status = document.getElementById('status');
     if (!video || !status) return;
 
-    // FIXED: warn immediately if no guest data is loaded
-    if (guests.length === 0) {
-        status.innerText = '⚠ No guest data found. Go to the Generator page and upload your CSV first.';
-        status.style.color = '#c0392b';
-        return;
-    }
-
-    status.innerText = `📷 Starting camera… (${guests.length} guests loaded)`;
+    status.innerText   = '📷 Starting camera…';
+    status.style.color = '';
 
     try {
         scannerStream = await navigator.mediaDevices.getUserMedia({
@@ -196,47 +206,44 @@ async function startScanner() {
             audio: false
         });
         video.srcObject = scannerStream;
-
-        // Let the browser autoplay handle it — calling .play() manually
-        // throws a DOMException on some Android browsers
         video.onloadedmetadata = () => video.play().catch(() => {});
 
-        status.innerText = '✅ Scanning — point camera at a QR code';
+        status.innerText   = '✅ Scanning — point camera at a QR code';
         status.style.color = '#27ae60';
 
         const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+        const ctx    = canvas.getContext('2d');
 
         const scanLoop = () => {
-            // FIXED: only process one frame at a time, with a 3s cooldown between scans
             if (!isProcessing && video.readyState === video.HAVE_ENOUGH_DATA) {
-                canvas.width = video.videoWidth;
+                canvas.width  = video.videoWidth;
                 canvas.height = video.videoHeight;
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, canvas.width, canvas.height, {
-                    inversionAttempts: 'dontInvert'
-                });
+                const code = jsQR(
+                    ctx.getImageData(0, 0, canvas.width, canvas.height).data,
+                    canvas.width,
+                    canvas.height,
+                    { inversionAttempts: 'dontInvert' }
+                );
 
                 if (code && code.data) {
                     isProcessing = true;
                     handleMatch(code.data);
                     setTimeout(() => {
                         isProcessing = false;
-                        status.innerText = '✅ Scanning — point camera at a QR code';
+                        status.innerText   = '✅ Scanning — point camera at a QR code';
                         status.style.color = '#27ae60';
-                    }, 3000); // 3 second cooldown before next scan
+                    }, 3000);
                 }
             }
-            requestAnimationFrame(scanLoop);
+            if (scannerStream) requestAnimationFrame(scanLoop);
         };
 
         scanLoop();
 
     } catch (err) {
-        console.error('Camera error:', err);
-        status.innerText = '❌ Camera error: ' + (err.message || 'Permission denied. Please allow camera access.');
+        status.innerText   = '❌ Camera error: ' + (err.message || 'Permission denied.');
         status.style.color = '#c0392b';
     }
 }
@@ -247,66 +254,71 @@ function stopScanner() {
         scannerStream = null;
     }
     const status = document.getElementById('status');
-    if (status) status.innerText = 'Scanner stopped.';
+    if (status) { status.innerText = 'Scanner stopped.'; status.style.color = ''; }
 }
 
-// ── HANDLE SCAN MATCH ─────────────────────────
-function handleMatch(scannedId) {
-    const status = document.getElementById('status');
-    const popup = document.getElementById('result-popup');
+// ── HANDLE SCAN ───────────────────────────────
+// Reads guest name & invitedBy directly from the QR JSON.
+// No localStorage guest list lookup needed at all.
+function handleMatch(rawData) {
+    const status    = document.getElementById('status');
+    const popup     = document.getElementById('result-popup');
+    const resName   = document.getElementById('res-name');
+    const resDetail = document.getElementById('res-detail');
 
-    // FIXED: guard against empty guest list
-    if (guests.length === 0) {
-        status.innerText = '⚠ No guests loaded. Go to Generator and upload CSV first.';
+    let guestName = '';
+    let invitedBy = '';
+
+    try {
+        const parsed = JSON.parse(rawData);
+        guestName = (parsed.n || '').trim();
+        invitedBy = (parsed.i || '').trim();
+    } catch (e) {
+        popup.style.display    = 'block';
+        popup.style.background = '#f8d7da';
+        popup.style.borderLeft = '5px solid #c0392b';
+        resName.innerText   = '❌ Invalid QR Code';
+        resDetail.innerText = 'This QR was not generated by this system.';
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
         return;
     }
 
-    const guest = guests.find(g => g.id === scannedId);
-    if (!guest) {
-        // QR exists but not in guest list
-        popup.style.display = 'block';
+    if (!guestName) {
+        popup.style.display    = 'block';
         popup.style.background = '#f8d7da';
         popup.style.borderLeft = '5px solid #c0392b';
-        document.getElementById('res-name').innerText = '❌ Not on Guest List';
-        document.getElementById('res-detail').innerText = 'This QR code was not found in the RSVP data.';
-        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-        if (status) { status.innerText = '❌ Unknown QR scanned'; status.style.color = '#c0392b'; }
+        resName.innerText   = '❌ Empty QR Code';
+        resDetail.innerText = 'No guest name found in this QR.';
         return;
     }
 
     popup.style.display = 'block';
 
-    if (checkins.includes(scannedId)) {
-        // Already checked in
+    if (checkins.includes(guestName)) {
         popup.style.background = '#fff3cd';
         popup.style.borderLeft = '5px solid #f39c12';
-        document.getElementById('res-name').innerText = '⚠ Already Checked In';
-        document.getElementById('res-detail').innerText = `${guest.name} — please verify identity.`;
+        resName.innerText   = '⚠ Already Checked In';
+        resDetail.innerText = `${guestName}\nPlease verify their identity.`;
         if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
-        if (status) { status.innerText = `⚠ ${guest.name} already checked in`; status.style.color = '#e67e22'; }
+        if (status) { status.innerText = `⚠ ${guestName} already checked in`; status.style.color = '#e67e22'; }
     } else {
-        // First check-in — success
-        checkins.push(scannedId);
+        checkins.push(guestName);
         saveAll();
         popup.style.background = '#d4edda';
         popup.style.borderLeft = '5px solid #27ae60';
-        document.getElementById('res-name').innerText = `✅ Welcome!`;
-        document.getElementById('res-detail').innerText = `${guest.name}\nInvited by: ${guest.info}`;
+        resName.innerText   = '✅ Welcome!';
+        resDetail.innerText = `${guestName}\nInvited by: ${invitedBy}`;
         if (navigator.vibrate) navigator.vibrate(200);
-        if (status) { status.innerText = `✅ ${guest.name} checked in!`; status.style.color = '#27ae60'; }
-
-        // Highlight card on generator page if open
-        const card = document.getElementById(`card-${scannedId}`);
-        if (card) card.classList.add('checked-in');
+        if (status) { status.innerText = `✅ ${guestName} checked in!`; status.style.color = '#27ae60'; }
     }
 }
 
 // ── UTILS ─────────────────────────────────────
 function updateDashboard() {
-    const total = document.getElementById('total-count');
+    const total   = document.getElementById('total-count');
     const inCount = document.getElementById('in-count');
     const pending = document.getElementById('pending-count');
-    if (total) total.innerText = guests.length;
+    if (total)   total.innerText   = guests.length;
     if (inCount) inCount.innerText = checkins.length;
     if (pending) pending.innerText = guests.length - checkins.length;
 }
@@ -314,15 +326,13 @@ function updateDashboard() {
 function downloadReport() {
     let csv = 'Name,Invited By,Phone,Email,Status\n';
     guests.forEach(g => {
-        const status = checkins.includes(g.id) ? 'Present' : 'Absent';
-        csv += `"${g.name}","${g.info}","${g.phone || ''}","${g.email || ''}",${status}\n`;
+        const st = checkins.includes(g.name) ? 'Present' : 'Absent';
+        csv += `"${g.name}","${g.info}","${g.phone || ''}","${g.email || ''}",${st}\n`;
     });
     const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'Attendance_Report.csv';
-    a.click();
+    const url  = window.URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'Attendance_Report.csv'; a.click();
     window.URL.revokeObjectURL(url);
 }
 
