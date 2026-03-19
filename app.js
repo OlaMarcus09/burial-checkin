@@ -196,7 +196,10 @@ async function startScanner() {
             audio: false
         });
         video.srcObject = scannerStream;
-        await video.play();
+
+        // Let the browser autoplay handle it — calling .play() manually
+        // throws a DOMException on some Android browsers
+        video.onloadedmetadata = () => video.play().catch(() => {});
 
         status.innerText = '✅ Scanning — point camera at a QR code';
         status.style.color = '#27ae60';
